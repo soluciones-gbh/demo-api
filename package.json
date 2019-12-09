@@ -1,0 +1,26 @@
+{
+  "name": "gbh-demo-api",
+  "version": "1.0.0",
+  "description": "A demo API using nodejs!",
+  "main": "index.js",
+  "scripts": {
+    "start": "node bin/init.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soluciones-gbh/demo-api.git"
+  },
+  "author": "Soluciones GBH, Inc.",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/soluciones-gbh/demo-api/issues"
+  },
+  "homepage": "https://github.com/soluciones-gbh/demo-api#readme",
+  "dependencies": {
+    "cookie-parser": "^1.4.4",
+    "debug": "^4.1.1",
+    "express": "^4.17.1",
+    "morgan": "^1.9.1"
+  }
+}

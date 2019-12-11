@@ -1,21 +1,23 @@
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
 
-var indexRouter = require('./routes/index');
+/* Make enviropnment variables from the dotenv file available */
+require('dotenv').config();
 
-var app = express();
-var cors = require('cors');
+/* Initialize express */
+const app = express();
 
+/* Set up middlewares & application configuration */
 app.use(cors());
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
-app.use(logger('dev'));
+/* API routes */
+app.use(require('./src/routes'));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-
-app.use('/', indexRouter);
+/* Initialize the API server */
+const port = process.env.API_PORT || 3001;
+app.listen( port, () => console.log(`Server running on: ${port}`));
 
 module.exports = app;

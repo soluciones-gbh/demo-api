@@ -4,19 +4,10 @@
   "description": "A demo API using nodejs!",
   "main": "index.js",
   "scripts": {
-    "start": "node app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/soluciones-gbh/demo-api.git"
+    "start": "node app.js"
   },
   "author": "Soluciones GBH, Inc.",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/soluciones-gbh/demo-api/issues"
-  },
-  "homepage": "https://github.com/soluciones-gbh/demo-api#readme",
   "dependencies": {
     "cookie-parser": "^1.4.4",
     "cors": "^2.8.5",

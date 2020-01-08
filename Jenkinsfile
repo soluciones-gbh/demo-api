@@ -1,3 +1,5 @@
+def TIMESTAMP = Calendar.getInstance().getTime().format('YYYYMMdd-hhmm')
+
 pipeline {
   agent {
     label "docker"
@@ -12,6 +14,7 @@ pipeline {
     nodeEnv = "development"
     repoBaseURL = "git@github.com:soluciones-gbh"
     webPath = "/srv/demo-webapp"
+    officeWebhookUrl = "https://outlook.office.com/webhook/fd2e0e97-97df-4057-a9df-ff2e0c66196a@64aa16ab-5980-47d5-a944-3f8cc9bbdfa2/IncomingWebhook/6c2ab55478d146efbe4041db69f97108/217bfa4b-9515-4221-b5b7-6858ebd6d4b5"
   }
 
   parameters {
@@ -40,11 +43,16 @@ pipeline {
 
         }
       }
+      post {
+        success {
+          office365ConnectorSend color: "05b222", message: "CI pipeline for ${apiBranch} initialized. ReviewApp will be available at: http://${hostPublic}.", status: "STARTED", webhookUrl: "${officeWebhookUrl}"
+        }
+      }
     }
 
     stage("Repositories") {
       parallel {
-        stage('CloningWEB') {
+        stage("CloningWEB") {
           steps {
             cloneProject("/srv", webRepo, webBranch)
           }
@@ -52,7 +60,7 @@ pipeline {
       }
     }
 
-    stage('Setup') {
+    stage("Setup") {
       steps {
         echo "This step will configure the application to be provisioned as a Review environment."
         sh(
@@ -70,9 +78,12 @@ pipeline {
       }
     }
 
-    stage('Initialize') {
+    stage("Initialize") {
       options {
-        timeout(time: 15, unit: 'MINUTES')
+        timeout(
+          time: 15,
+          unit: "MINUTES"
+        )
       }
       steps {
         echo "This step will configure the application to be provisioned as a Review environment."
@@ -84,29 +95,58 @@ pipeline {
           label: "Spinning up the WebApp containers...",
           script: "cd ${webPath} && docker-compose up -d"
         )
-        sh(
-          label: "Sleep for 5 seconds to ensure containers are healthy...",
-          script: "sleep 5"
-        )
-
-        input message: 'Do you want to start the validation process? Pipeline will self-destruct in 15 minutes if no input is provided.'
+        input message: "Do you want to start the validation process? Pipeline will self-destruct in 15 minutes if no input is provided."
       }
     }
 
-    stage('Validation') {
+    stage("Validation") {
       options {
-        timeout(time: 4, unit: 'HOURS')
+        timeout(
+          time: 4,
+          unit: "HOURS"
+        )
       }
       steps {
+        script {
+          jiraId = getTicketIdFromBranchName("${apiBranch}");
+        }
+        sh(
+          label: "Posting ReviewApp data to Kanon...",
+          script: """
+            curl \
+              -H "Content-Type: application/json" \
+              -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
+              -d '{"branch": "${apiBranch}", "apiURL": "http://${hostPublic}:3001", "jiraIssueKey": "${jiraId}", "build": "${BUILD_NUMBER}", "webAppLink": "${hostPublic}"}' \
+              -X POST \
+              https://kanon-api.gbhlabs.net/api/reviewapps
+          """
+        )
+
         prettyPrint("ReviewApp URL: http://${hostPublic}")
         echo getTaskLink(apiBranch)
-        input message: 'Validation finished?'
+        input message: "Validation finished?"
       }
     }
   }
 
   post {
+    failure {
+      office365ConnectorSend color: "f40909", message: "CI pipeline for ${apiBranch} failed. Please check the logs for more information.", status: "FAILED", webhookUrl: "${officeWebhookUrl}"
+    }
+    success {
+      office365ConnectorSend color:"50bddf", message: "CI pipeline for ${apiBranch} completed succesfully.", status:"SUCCESS", webhookUrl:"${officeWebhookUrl}"
+    }
     always {
+      sh(
+        label: "Posting ReviewApp status to Kanon...",
+        script: """
+          curl \
+            -H "Content-Type: application/json" \
+            -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
+            -X POST \
+            https://kanon-api.gbhlabs.net/api/reviewapps/deactivation?build=${BUILD_NUMBER}\\&branch=${apiBranch}
+        """
+      )
       sh(
         label: "Cleaning up API containers...",
         script: "docker-compose down --remove-orphans --volumes --rmi local"
@@ -128,8 +168,7 @@ pipeline {
  * https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-instance-addressing.html
  */
 def getHostName() {
-  metadataUrl = 'http://169.254.169.254/latest/meta-data/public-hostname'
-
+  metadataUrl = "http://169.254.169.254/latest/meta-data/public-hostname"
   return sh(
     label: "Fetching host URL...",
     script: "curl ${metadataUrl}",
@@ -141,7 +180,10 @@ def getHostName() {
  * Prints the message using sh label.
  */
 def prettyPrint(String message) {
-  sh(label: message, script: "echo ${message}")
+  sh(
+    label: message,
+    script: "echo ${message}"
+  )
 }
 
 /*
@@ -160,8 +202,8 @@ def getBranchForRepo(String repo, String branchToCheck, String defaultBranch) {
     return branchToCheck
   }
 
-  if (defaultBranch == 'master') {
-    return 'master'
+  if (defaultBranch == "master") {
+    return "master"
   }
 
   return defaultBranch
@@ -180,12 +222,19 @@ def getTaskLink(String branch) {
   return "Could not get this branch task URL."
 }
 
-/**
+/*
  * Go to the given project path and makes sure the project is on the given branch.
  */
 def cloneProject(String path, String repo, String branch) {
   sh(
     label: "Updating ${path} repository...",
-    script: "cd ${path} && git clone -b ${branch} ${repo} "
+    script: "cd ${path} && git clone -b ${branch} ${repo}"
   )
+}
+
+/*
+ * Get the ticket ID using the branch name.
+ */
+def getTicketIdFromBranchName(String branchName) {
+  return branchName.findAll(/(DP-[0-9]+)/)[0];
 }

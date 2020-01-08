@@ -108,7 +108,7 @@ pipeline {
       }
       steps {
         script {
-          jiraId = getTicketIdFromBranchName("${webBranch}");
+          jiraId = getTicketIdFromBranchName("${apiBranch}");
         }
         sh(
           label: "Posting ReviewApp data to Kanon...",

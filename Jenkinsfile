@@ -112,9 +112,9 @@ pipeline {
           label: "Posting ReviewApp data to Kanon...",
           script: """
             curl \
-              -H \"Content-Type: application/json" \
+              -H "Content-Type: application/json" \
               -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
-              -d '{"branch": "${apiBranch}", "apiURL": "http://${hostPublic}:3001", "jiraIssueKey": "${jiraId}", "build": "${BUILD_NUMBER}", "webAppLink": "${hostPublic}"' \
+              -d '{"branch": "${apiBranch}", "apiURL": "http://${hostPublic}:3001", "jiraIssueKey": "${jiraId}", "build": "${BUILD_NUMBER}", "webAppLink": "${hostPublic}"}' \
               -X POST \
               https://kanon-api.gbhlabs.net/api/reviewapps
           """
@@ -123,17 +123,6 @@ pipeline {
         prettyPrint("ReviewApp URL: http://${hostPublic}")
         echo getTaskLink(apiBranch)
         input message: "Validation finished?"
-
-        sh(
-          label: "Posting ReviewApp status to Kanon...",
-          script: """
-            curl \
-              -H "Content-Type: application/json" \
-              -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
-              -X POST \
-              https://kanon-api.gbhlabs.net/api/reviewapps/deactivation?build=${BUILD_NUMBER}\\&branch=${apiBranch}
-          """
-        )
       }
     }
   }
@@ -146,6 +135,16 @@ pipeline {
       office365ConnectorSend color:"50bddf", message: "CI pipeline for ${apiBranch} completed succesfully.", status:"SUCCESS", webhookUrl:"${officeWebhookUrl}"
     }
     always {
+      sh(
+        label: "Posting ReviewApp status to Kanon...",
+        script: """
+          curl \
+            -H "Content-Type: application/json" \
+            -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
+            -X POST \
+            https://kanon-api.gbhlabs.net/api/reviewapps/deactivation?build=${BUILD_NUMBER}\\&branch=${apiBranch}
+        """
+      )
       sh(
         label: "Cleaning up API containers...",
         script: "docker-compose down --remove-orphans --volumes --rmi local"
@@ -235,5 +234,5 @@ def cloneProject(String path, String repo, String branch) {
  * Get the ticket ID using the branch name.
  */
 def getTicketIdFromBranchName(String branchName) {
-  return branchName.findAll(/(PMP-[0-9]+)/)[0];
+  return branchName.findAll(/(DP-[0-9]+)/)[0];
 }

@@ -35,7 +35,6 @@ pipeline {
           apiBranch = "${env.CHANGE_BRANCH}"
           webRepo = "${repoBaseURL}/demo-webapp.git"
           webBranch = getBranchForRepo(webRepo, apiBranch, params.webBranch)
-          jiraId = getTicketIdFromBranchName(env.GIT_BRANCH)
 
           /* Print all the variables assigned in this stage. */
           prettyPrint("ReviewApp URL: ${hostPublic}")
@@ -108,6 +107,9 @@ pipeline {
         )
       }
       steps {
+        script {
+          jiraId = getTicketIdFromBranchName("${webBranch}");
+        }
         sh(
           label: "Posting ReviewApp data to Kanon...",
           script: """

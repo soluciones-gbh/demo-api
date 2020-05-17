@@ -11,10 +11,13 @@ pipeline {
   }
 
   environment {
-    nodeEnv = "development"
-    repoBaseURL = "git@github.com:soluciones-gbh"
-    webPath = "/srv/demo-webapp"
-    officeWebhookUrl = "https://outlook.office.com/webhook/fd2e0e97-97df-4057-a9df-ff2e0c66196a@64aa16ab-5980-47d5-a944-3f8cc9bbdfa2/IncomingWebhook/6c2ab55478d146efbe4041db69f97108/217bfa4b-9515-4221-b5b7-6858ebd6d4b5"
+    sonarqube_name    = "Demo-API"
+    sonarqube_url     = "https://eris.gbhapps.com"
+    sonarqube_token   = credentials('sonar_token')
+    nodeEnv           = "development"
+    repoBaseURL       = "git@github.com:soluciones-gbh"
+    webPath           = "/srv/demo-webapp"
+    officeWebhookUrl  = "https://outlook.office.com/webhook/fd2e0e97-97df-4057-a9df-ff2e0c66196a@64aa16ab-5980-47d5-a944-3f8cc9bbdfa2/IncomingWebhook/6c2ab55478d146efbe4041db69f97108/217bfa4b-9515-4221-b5b7-6858ebd6d4b5"
   }
 
   parameters {
@@ -60,21 +63,45 @@ pipeline {
       }
     }
 
-    stage("Setup") {
-      steps {
-        echo "This step will configure the application to be provisioned as a Review environment."
-        sh(
-          label: "Building API docker images...",
-          script: "docker-compose build --no-cache"
-        )
-        sh(
-          label: "Adding API_URL to dotenv...",
-          script: "sed -i 's|REACT_APP_API_URL=.*|REACT_APP_API_URL=http://${hostPublic}:3001|' ${webPath}/.env.example"
-        )
-        sh(
-          label: "Building WebApp docker images...",
-          script: "cd ${webPath} && docker-compose build --no-cache"
-        )
+    stage("Setup & Test") {
+      parallel {
+        stage("Build") {
+          steps {
+            echo "This step will configure the application to be provisioned as a Review environment."
+            sh(
+              label: "Building API docker images...",
+              script: "docker-compose build --no-cache"
+            )
+            sh(
+              label: "Adding API_URL to dotenv...",
+              script: "sed -i 's|REACT_APP_API_URL=.*|REACT_APP_API_URL=http://${hostPublic}:3001|' ${webPath}/.env.example"
+            )
+            sh(
+              label: "Building WebApp docker images...",
+              script: "cd ${webPath} && docker-compose build --no-cache"
+            )
+          }
+        }
+        stage('SAST') {
+          steps {
+            script {
+              jiraId = getTicketIdFromBranchName("${apiBranch}");
+            }
+            echo "This step will test the code with sonarqube"
+            sh(
+              label: "Testing with sonarqube",
+              script: """
+              sonar-scanner \
+                  -Dsonar.projectName=${sonarqube_name} \
+                  -Dsonar.projectKey=${sonarqube_name} \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=${sonarqube_url} \
+                  -Dsonar.login=${sonarqube_token} \
+                  -Dsonar.projectVersion=${jiraId}
+              """
+            )
+          }
+        }
       }
     }
 
@@ -100,31 +127,46 @@ pipeline {
     }
 
     stage("Validation") {
-      options {
-        timeout(
-          time: 4,
-          unit: "HOURS"
-        )
-      }
-      steps {
-        script {
-          jiraId = getTicketIdFromBranchName("${apiBranch}");
+      parallel {
+        stage("Kanon") {
+          options {
+            timeout(
+              time: 4,
+              unit: "HOURS"
+              )
+          }
+          steps {
+            script {
+              jiraId = getTicketIdFromBranchName("${apiBranch}");
+            }
+            sh(
+              label: "Posting ReviewApp data to Kanon...",
+              script: """
+                curl \
+                  -H "Content-Type: application/json" \
+                  -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
+                  -d '{"branch": "${apiBranch}", "apiURL": "http://${hostPublic}:3001", "jiraIssueKey": "${jiraId}", "build": "${BUILD_NUMBER}", "webAppLink": "${hostPublic}"}' \
+                  -X POST \
+                  https://kanon-api.gbhlabs.net/api/reviewapps
+              """
+            )  
+            prettyPrint("ReviewApp URL: http://${hostPublic}")
+            echo getTaskLink(apiBranch)
+            input message: "Validation finished?"
+          }
         }
-        sh(
-          label: "Posting ReviewApp data to Kanon...",
-          script: """
-            curl \
-              -H "Content-Type: application/json" \
-              -H "authToken: as5uNvV5bKAa4Bzg24Bc" \
-              -d '{"branch": "${apiBranch}", "apiURL": "http://${hostPublic}:3001", "jiraIssueKey": "${jiraId}", "build": "${BUILD_NUMBER}", "webAppLink": "${hostPublic}"}' \
-              -X POST \
-              https://kanon-api.gbhlabs.net/api/reviewapps
-          """
-        )
-
-        prettyPrint("ReviewApp URL: http://${hostPublic}")
-        echo getTaskLink(apiBranch)
-        input message: "Validation finished?"
+        stage("DAST") {
+          steps {
+            catchError {
+              sh(
+                label: "Scaning App with ZAP",
+                script: """
+                  docker run -t owasp/zap2docker-stable zap-full-scan.py -t http://${hostPublic}
+                """
+              )
+            }
+          }
+        }
       }
     }
   }

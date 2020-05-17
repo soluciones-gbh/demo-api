@@ -161,7 +161,7 @@ pipeline {
               sh(
                 label: "Scaning App with ZAP",
                 script: """
-                  docker run -t owasp/zap2docker-stable zap-api-scan.py -t http://${hostPublic}:3001
+                  docker run -t owasp/zap2docker-stable zap-api-scan.py -t http://${hostPublic}:3001 -f openapi
                 """
               )
             }

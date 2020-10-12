@@ -1,3 +1,3 @@
 # Demo API
 
-> This is a demo project. It was made using ExpressJS. (MASTER)
+> This is a demo project. It was made using ExpressJS. (MASTER 1)
